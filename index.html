@@ -5,20 +5,44 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D Algorithm Christmas Tree</title>
     <style>
-        body { margin: 0; background-color: #111; overflow: hidden; font-family: sans-serif; }
-        canvas { display: block; }
+        /* 核心修复：确保容器占据全屏 */
+        body, html, #root { 
+            margin: 0; 
+            padding: 0; 
+            width: 100%; 
+            height: 100%; 
+            background-color: #111; 
+            overflow: hidden; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
         #ui {
-            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
-            z-index: 10;
+            position: absolute; 
+            bottom: 40px; 
+            left: 50%; 
+            transform: translateX(-50%);
+            z-index: 100;
         }
         button {
-            padding: 12px 24px; font-size: 16px; cursor: pointer;
-            background: #8a0a0a; color: white; border: 2px solid #FFD700;
-            border-radius: 30px; transition: all 0.3s; font-weight: bold;
-            box-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
+            padding: 14px 28px; 
+            font-size: 16px; 
+            cursor: pointer;
+            background: #8a0a0a; 
+            color: white; 
+            border: 2px solid #FFD700;
+            border-radius: 50px; 
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5), 0 0 10px rgba(255, 215, 0, 0.2);
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
-        button:hover { background: #b31212; transform: scale(1.05); }
-        button:active { transform: scale(0.95); }
+        button:hover { 
+            background: #b31212; 
+            transform: translateX(-50%) scale(1.1); 
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
+        }
+        /* 解决 transform 冲突 */
+        #ui button { transform: none; } 
     </style>
 </head>
 <body>
@@ -32,6 +56,184 @@
 <script type="importmap">
 {
   "imports": {
-    "react": "https://esm.sh/react@18",
-    "react-dom": "https://esm.sh/react-dom@18",
-    "react-dom/client": "https://esm.sh/react-dom@18/client",
+    "react": "https://esm.sh/react@18.2.0",
+    "react-dom": "https://esm.sh/react-dom@18.2.0",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+    "three": "https://esm.sh/three@0.160.0",
+    "@react-three/fiber": "https://esm.sh/@react-three/fiber@8.15.11?external=three,react,react-dom",
+    "@react-three/drei": "https://esm.sh/@react-three/drei@9.92.7?external=three,react,react-dom"
+  }
+}
+</script>
+
+<script type="module">
+    import React, { useState, useMemo, useRef, useEffect } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import * as THREE from 'three';
+    import { Canvas, useFrame } from '@react-three/fiber';
+    import { OrbitControls, PerspectiveCamera, Extrude, Float } from '@react-three/drei';
+
+    const PARTICLE_COUNT = 2500;
+    const COLORS_C = ['#00ffff', '#ff69b4', '#ffa500', '#ffffff'];
+
+    // 五角星生成逻辑
+    function StarShape() {
+        return useMemo(() => {
+            const shape = new THREE.Shape();
+            const outerRadius = 0.8;
+            const innerRadius = 0.4;
+            for (let i = 0; i < 10; i++) {
+                const angle = (i * Math.PI) / 5 - Math.PI / 2;
+                const r = i % 2 === 0 ? outerRadius : innerRadius;
+                const x = r * Math.cos(angle);
+                const y = r * Math.sin(angle);
+                if (i === 0) shape.moveTo(x, y);
+                else shape.lineTo(x, y);
+            }
+            shape.closePath();
+            return shape;
+        }, []);
+    }
+
+    const Star = () => {
+        const shape = StarShape();
+        const starRef = useRef();
+        useFrame((state) => {
+            if (starRef.current) starRef.current.rotation.y += 0.02;
+        });
+        return (
+            <group position={[0, 20.2, 0]}>
+                <Extrude 
+                    ref={starRef}
+                    args={[shape, { depth: 0.3, bevelEnabled: true, bevelThickness: 0.1 }]}
+                >
+                    <meshStandardMaterial color="#FFD700" emissive="#FFD700" emissiveIntensity={2} />
+                </Extrude>
+            </group>
+        );
+    };
+
+    const Particle = ({ data, exploded }) => {
+        const meshRef = useRef();
+        const v3 = new THREE.Vector3();
+        const randomPos = useMemo(() => [
+            (Math.random() - 0.5) * 50,
+            (Math.random() - 0.2) * 40,
+            (Math.random() - 0.5) * 50
+        ], []);
+
+        useFrame(() => {
+            if (!meshRef.current) return;
+            const target = exploded ? randomPos : data.treePos;
+            v3.set(...target);
+            meshRef.current.position.lerp(v3, 0.06); // 稍微加快平滑速度
+            // 爆炸时增加一点随机旋转
+            if (exploded) {
+                meshRef.current.rotation.x += 0.01;
+                meshRef.current.rotation.y += 0.01;
+            } else {
+                meshRef.current.rotation.set(0, 0, 0);
+            }
+        });
+
+        return (
+            <mesh ref={meshRef} position={data.treePos} scale={data.scale}>
+                {data.type === 'A' && <coneGeometry args={[0.3, 0.7, 5]} />}
+                {data.type === 'B' && <sphereGeometry args={[0.25, 12, 12]} />}
+                {data.type === 'C' && <boxGeometry args={[0.3, 0.3, 0.3]} />}
+                
+                <meshStandardMaterial 
+                    color={data.color}
+                    roughness={data.type === 'A' ? 0.8 : 0.1}
+                    metalness={data.type === 'B' ? 1.0 : 0}
+                    emissive={data.type === 'C' ? data.color : '#000'}
+                    emissiveIntensity={data.type === 'C' ? 8 : 0}
+                />
+            </mesh>
+        );
+    };
+
+    const TreeParticles = ({ exploded }) => {
+        const particles = useMemo(() => {
+            const temp = [];
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                const t = i / PARTICLE_COUNT; 
+                const angle = i * 137.5 * (Math.PI / 180); 
+                const y = t * 20; 
+                const baseR = (1 - t) * 6; 
+                const layerWave = Math.sin(t * 25.0) * 0.8 * (1 - t);
+                
+                const rand = Math.random();
+                let type, radiusOffset, scale, color;
+
+                if (rand < 0.7) {
+                    type = 'A';
+                    radiusOffset = Math.random() * 0.2;
+                    scale = 0.6 + Math.random() * 0.4;
+                    color = '#003318';
+                } else if (rand < 0.9) {
+                    type = 'B';
+                    radiusOffset = 0.4 + Math.random() * 0.2;
+                    scale = 1.2 + Math.random() * 0.6;
+                    color = Math.random() > 0.5 ? '#FFD700' : '#8a0a0a';
+                } else {
+                    type = 'C';
+                    radiusOffset = 0.25 + Math.random() * 0.2;
+                    scale = 0.7;
+                    color = COLORS_C[Math.floor(Math.random() * COLORS_C.length)];
+                }
+
+                const r = baseR + layerWave + radiusOffset;
+                const tx = r * Math.cos(angle);
+                const tz = r * Math.sin(angle);
+
+                temp.push({ type, treePos: [tx, y, tz], scale, color });
+            }
+            return temp;
+        }, []);
+
+        return (
+            <group position={[0, -10, 0]}> {/* 稍微下移中心 */}
+                {particles.map((p, i) => (
+                    <Particle key={i} data={p} exploded={exploded} />
+                ))}
+            </group>
+        );
+    };
+
+    const App = () => {
+        const [exploded, setExploded] = useState(false);
+
+        useEffect(() => {
+            const btn = document.getElementById('toggleBtn');
+            const handler = () => setExploded(v => !v);
+            btn.addEventListener('click', handler);
+            return () => btn.removeEventListener('click', handler);
+        }, []);
+
+        return (
+            <Canvas shadows dpr={[1, 2]}>
+                <color attach="background" args={['#0a0a0a']} />
+                <PerspectiveCamera makeDefault position={[0, 2, 35]} fov={45} />
+                <OrbitControls enableDamping minDistance={10} maxDistance={60} />
+
+                <ambientLight intensity={0.4} />
+                <pointLight position={[10, 20, 10]} intensity={2} color="#fff" />
+                <spotLight position={[-20, 20, 10]} angle={0.15} penumbra={1} intensity={1} />
+
+                <TreeParticles exploded={exploded} />
+                <Star />
+                
+                {/* 增加简单的地面反射感 */}
+                <gridHelper args={[100, 20, '#222', '#111']} position={[0, -10.1, 0]} />
+            </Canvas>
+        );
+    };
+
+    const rootElement = document.getElementById('root');
+    const root = createRoot(rootElement);
+    root.render(<App />);
+</script>
+
+</body>
+</html>
