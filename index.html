@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Algorithm Christmas Tree</title>
+    <style>
+        body { margin: 0; background-color: #111; overflow: hidden; font-family: sans-serif; }
+        canvas { display: block; }
+        #ui {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            z-index: 10;
+        }
+        button {
+            padding: 12px 24px; font-size: 16px; cursor: pointer;
+            background: #8a0a0a; color: white; border: 2px solid #FFD700;
+            border-radius: 30px; transition: all 0.3s; font-weight: bold;
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
+        }
+        button:hover { background: #b31212; transform: scale(1.05); }
+        button:active { transform: scale(0.95); }
+    </style>
+</head>
+<body>
+
+<div id="ui">
+    <button id="toggleBtn">EXPLODE / ASSEMBLE</button>
+</div>
+
+<div id="root"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18",
+    "react-dom": "https://esm.sh/react-dom@18",
+    "react-dom/client": "https://esm.sh/react-dom@18/client",
